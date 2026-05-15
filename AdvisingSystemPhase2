@@ -1,0 +1,412 @@
+package datastructcureproject;
+
+/**
+ * The core implementation of the Student Advising System for Phase 2.
+ * This class uses separated Binary Search Tree Maps to handle Students, 
+ * Advisors, Locations, and Events in O(log n) time.
+ */
+public class AdvisingSystemPhase2 implements IAdvisingSystemPhase2 {
+
+    // Separate Maps are much cleaner and safer than one giant "Persons" map!
+    private Map<Integer, IStudent> students;
+    private Map<Integer, IAdvisor> advisors;
+    private Map<Integer, ILocation> locations;
+    private Map<Integer, IEvent> events;
+
+    // Automatic ID generator for new events
+    private int nextEventId = 10000;
+
+    public AdvisingSystemPhase2() {
+        this.students = new BSTMap<Integer, IStudent>();
+        this.advisors = new BSTMap<Integer, IAdvisor>();
+        this.locations = new BSTMap<Integer, ILocation>();
+        this.events = new BSTMap<Integer, IEvent>();
+    }
+
+    @Override
+    public Set<IAdvisor> getAdvisors() {
+        Set<IAdvisor> set = new BSTSet<IAdvisor>();
+        if (!advisors.empty()) {
+            List<Integer> keys = advisors.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    set.insert(advisors.get(keys.retrieve()));
+                    keys.findNext();
+                }
+                set.insert(advisors.get(keys.retrieve()));
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public Set<IStudent> getStudents() {
+        Set<IStudent> set = new BSTSet<IStudent>();
+        if (!students.empty()) {
+            List<Integer> keys = students.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    set.insert(students.get(keys.retrieve()));
+                    keys.findNext();
+                }
+                set.insert(students.get(keys.retrieve()));
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public Set<ILocation> getLocations() {
+        Set<ILocation> set = new BSTSet<ILocation>();
+        if (!locations.empty()) {
+            List<Integer> keys = locations.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    set.insert(locations.get(keys.retrieve()));
+                    keys.findNext();
+                }
+                set.insert(locations.get(keys.retrieve()));
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public Set<IMeeting> getMeetings() {
+        Set<IMeeting> set = new BSTSet<IMeeting>();
+        if (!events.empty()) {
+            List<Integer> keys = events.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    IEvent e = events.get(keys.retrieve());
+                    if (e instanceof IMeeting) set.insert((IMeeting) e);
+                    keys.findNext();
+                }
+                IEvent e = events.get(keys.retrieve());
+                if (e instanceof IMeeting) set.insert((IMeeting) e);
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public Set<IWorkshop> getWorkshops() {
+        Set<IWorkshop> set = new BSTSet<IWorkshop>();
+        if (!events.empty()) {
+            List<Integer> keys = events.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    IEvent e = events.get(keys.retrieve());
+                    if (e instanceof IWorkshop) set.insert((IWorkshop) e);
+                    keys.findNext();
+                }
+                IEvent e = events.get(keys.retrieve());
+                if (e instanceof IWorkshop) set.insert((IWorkshop) e);
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public Set<IEvent> getEvents() {
+        Set<IEvent> set = new BSTSet<IEvent>();
+        if (!events.empty()) {
+            List<Integer> keys = events.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    set.insert(events.get(keys.retrieve()));
+                    keys.findNext();
+                }
+                set.insert(events.get(keys.retrieve()));
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public boolean addAdvisor(IAdvisor advisor) {
+        if (advisors.get(advisor.getId()) != null) return false;
+        return advisors.insert(advisor.getId(), advisor);
+    }
+
+    @Override
+    public IAdvisor searchAdvisorById(int advisorId) {
+        return advisors.get(advisorId);
+    }
+
+    @Override
+    public boolean addStudent(IStudent student) {
+        if (students.get(student.getId()) != null) return false;
+        return students.insert(student.getId(), student);
+    }
+
+    @Override
+    public IStudent searchStudentById(int studentId) {
+        return students.get(studentId);
+    }
+
+    @Override
+    public boolean deleteStudent(int studentId) {
+        IStudent student = students.get(studentId);
+        if (student == null) return false;
+
+        // Extract the schedule of the student to perform safe cascade deletion
+        ISchedule schedule = student.getSchedule();
+        if (!schedule.empty()) {
+            // Because Set.java doesn't have getKeys(), we safely grab the keys from the Schedule Map instead!
+            List<ITimeSlot> slots = schedule.getEvents().getKeys();
+            if (!slots.empty()) {
+                slots.findFirst();
+                while (!slots.last()) {
+                    int eventId = schedule.getEvents().get(slots.retrieve());
+                    removeStudentFromEventSafe(eventId, studentId);
+                    slots.findNext();
+                }
+                int eventId = schedule.getEvents().get(slots.retrieve());
+                removeStudentFromEventSafe(eventId, studentId);
+            }
+        }
+        
+        students.remove(studentId);
+        return true;
+    }
+
+    // Helper Method to prevent code duplication during cascade deletions
+    private void removeStudentFromEventSafe(int eventId, int studentId) {
+        IEvent event = events.get(eventId);
+        if (event == null) return;
+
+        if (event instanceof IMeeting) {
+            cancelMeeting(eventId); 
+        } else if (event instanceof IWorkshop) {
+            try {
+                removeStudentFromWorkshop(eventId, studentId);
+            } catch (SchedulingException e) {
+                // Safe to ignore if already removed
+            }
+        }
+    }
+
+    @Override
+    public boolean addLocation(ILocation location) {
+        if (locations.get(location.getId()) != null) return false;
+        return locations.insert(location.getId(), location);
+    }
+
+    @Override
+    public ILocation searchLocationById(int locationId) {
+        return locations.get(locationId);
+    }
+
+    @Override
+    public int scheduleMeeting(ITimeSlot timeSlot, int advisorId, int studentId) throws SchedulingException {
+        IStudent student = students.get(studentId);
+        if (student == null) throw new SchedulingException(ScheduleFailureReason.STUDENT_NOT_FOUND);
+
+        IAdvisor advisor = advisors.get(advisorId);
+        if (advisor == null) throw new SchedulingException(ScheduleFailureReason.ADVISOR_NOT_FOUND);
+
+        if (student.getSchedule().conflicts(timeSlot)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_STUDENT);
+        if (advisor.getSchedule().conflicts(timeSlot)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_ADVISOR);
+
+        int meetingId = nextEventId++;
+        
+        // Advisors office is a private location
+        IMeeting meeting = new Meeting(meetingId, timeSlot, advisor.getOffice(), advisorId, studentId);
+
+        student.getSchedule().add(meetingId, timeSlot);
+        advisor.getSchedule().add(meetingId, timeSlot);
+        events.insert(meetingId, meeting);
+
+        return meetingId;
+    }
+
+    @Override
+    public int scheduleWorkshop(String title, ITimeSlot timeSlot, int locationId, int[] advisorIds, int[] studentIds) throws SchedulingException {
+        
+        // 1. Verify Students
+        for (int i = 0; i < studentIds.length; i++) {
+            IStudent s = students.get(studentIds[i]);
+            if (s == null) throw new SchedulingException(ScheduleFailureReason.STUDENT_NOT_FOUND);
+            if (s.getSchedule().conflicts(timeSlot)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_STUDENT);
+        }
+
+        // 2. Verify Advisors
+        for (int i = 0; i < advisorIds.length; i++) {
+            IAdvisor a = advisors.get(advisorIds[i]);
+            if (a == null) throw new SchedulingException(ScheduleFailureReason.ADVISOR_NOT_FOUND);
+            if (a.getSchedule().conflicts(timeSlot)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_ADVISOR);
+        }
+
+        // 3. Verify Location
+        ILocation loc = locations.get(locationId);
+        if (loc == null) throw new SchedulingException(ScheduleFailureReason.LOCATION_NOT_FOUND);
+        if (!loc.isReservable()) throw new SchedulingException(ScheduleFailureReason.LOCATION_NOT_RESERVABLE);
+        if (loc.getSchedule().conflicts(timeSlot)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_LOCATION);
+
+        // FIX: The tutor's code broke on online meetings (-1 capacity). This correctly handles it!
+        if (loc.getCapacity() != -1 && studentIds.length > loc.getCapacity()) {
+            throw new SchedulingException(ScheduleFailureReason.CAPACITY_EXCEEDED);
+        }
+
+        int workshopId = nextEventId++;
+        Set<Integer> advSet = new BSTSet<Integer>();
+        Set<Integer> stuSet = new BSTSet<Integer>();
+
+        // 4. Construct Workshop
+        IWorkshop workshop = new Workshop(workshopId, title, timeSlot, loc, advSet, stuSet);
+        events.insert(workshopId, workshop);
+        loc.getSchedule().add(workshopId, timeSlot);
+
+        // 5. Update Schedules & Participant Sets
+        for (int i = 0; i < advisorIds.length; i++) {
+            advSet.insert(advisorIds[i]);
+            advisors.get(advisorIds[i]).getSchedule().add(workshopId, timeSlot);
+        }
+
+        for (int i = 0; i < studentIds.length; i++) {
+            stuSet.insert(studentIds[i]);
+            students.get(studentIds[i]).getSchedule().add(workshopId, timeSlot);
+        }
+
+        return workshopId;
+    }
+
+    @Override
+    public boolean cancelMeeting(int meetingId) {
+        IEvent event = events.get(meetingId);
+        if (event == null || !(event instanceof IMeeting)) return false;
+
+        // Helper removes it safely without relying on unsafe casting or missing Set methods
+        removeEventFromAllPersons(meetingId);
+        events.remove(meetingId);
+        return true;
+    }
+
+    @Override
+    public boolean cancelWorkshop(int workshopId) {
+        IEvent event = events.get(workshopId);
+        if (event == null || !(event instanceof IWorkshop)) return false;
+
+        IWorkshop workshop = (IWorkshop) event;
+        ILocation loc = workshop.getLocation();
+        
+        // Remove from the location's schedule if it is a shared location
+        if (loc != null && loc.isReservable() && loc.getSchedule() != null) {
+            loc.getSchedule().remove(workshopId);
+        }
+
+        // Safely remove the workshop from everyone's schedules
+        removeEventFromAllPersons(workshopId);
+        events.remove(workshopId);
+        
+        return true;
+    }
+
+    /**
+     * Helper Method: Iterates through all global students and advisors to safely remove an event ID
+     * from their schedules. This guarantees NO compilation errors, even if the Set interface lacks methods!
+     */
+    private void removeEventFromAllPersons(int eventId) {
+        if (!students.empty()) {
+            List<Integer> keys = students.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    students.get(keys.retrieve()).getSchedule().remove(eventId);
+                    keys.findNext();
+                }
+                students.get(keys.retrieve()).getSchedule().remove(eventId);
+            }
+        }
+        if (!advisors.empty()) {
+            List<Integer> keys = advisors.getKeys();
+            if (!keys.empty()) {
+                keys.findFirst();
+                while (!keys.last()) {
+                    advisors.get(keys.retrieve()).getSchedule().remove(eventId);
+                    keys.findNext();
+                }
+                advisors.get(keys.retrieve()).getSchedule().remove(eventId);
+            }
+        }
+    }
+
+    @Override
+    public void addStudentToWorkshop(int workshopId, int studentId) throws SchedulingException {
+        IStudent student = students.get(studentId);
+        if (student == null) throw new SchedulingException(ScheduleFailureReason.STUDENT_NOT_FOUND);
+
+        IEvent event = events.get(workshopId);
+        if (event == null || !(event instanceof IWorkshop)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+        IWorkshop ws = (IWorkshop) event;
+
+        if (ws.getStudentIds().contains(studentId)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_STUDENT); 
+        if (student.getSchedule().conflicts(ws.getTimeSlot())) throw new SchedulingException(ScheduleFailureReason.CONFLICT_STUDENT);
+
+        ILocation loc = ws.getLocation();
+        if (loc.getCapacity() != -1 && ws.getStudentIds().size() >= loc.getCapacity()) {
+            throw new SchedulingException(ScheduleFailureReason.CAPACITY_EXCEEDED);
+        }
+
+        ws.getStudentIds().insert(studentId);
+        student.getSchedule().add(workshopId, ws.getTimeSlot());
+    }
+
+    @Override
+    public void removeStudentFromWorkshop(int workshopId, int studentId) throws SchedulingException {
+        IStudent student = students.get(studentId);
+        if (student == null) throw new SchedulingException(ScheduleFailureReason.STUDENT_NOT_FOUND);
+
+        IEvent event = events.get(workshopId);
+        if (event == null || !(event instanceof IWorkshop)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+        IWorkshop ws = (IWorkshop) event;
+
+        if (!ws.getStudentIds().contains(studentId)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+
+        ws.getStudentIds().remove(studentId);
+        student.getSchedule().remove(workshopId);
+
+        // Rule: If workshop becomes empty of students, it is deleted
+        if (ws.getStudentIds().empty()) {
+            cancelWorkshop(workshopId);
+        }
+    }
+
+    @Override
+    public void addAdvisorToWorkshop(int workshopId, int advisorId) throws SchedulingException {
+        IAdvisor advisor = advisors.get(advisorId);
+        if (advisor == null) throw new SchedulingException(ScheduleFailureReason.ADVISOR_NOT_FOUND);
+
+        IEvent event = events.get(workshopId);
+        if (event == null || !(event instanceof IWorkshop)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+        IWorkshop ws = (IWorkshop) event;
+
+        if (ws.getAdvisorIds().contains(advisorId)) throw new SchedulingException(ScheduleFailureReason.CONFLICT_ADVISOR);
+        if (advisor.getSchedule().conflicts(ws.getTimeSlot())) throw new SchedulingException(ScheduleFailureReason.CONFLICT_ADVISOR);
+
+        ws.getAdvisorIds().insert(advisorId);
+        advisor.getSchedule().add(workshopId, ws.getTimeSlot());
+    }
+
+    @Override
+    public void removeAdvisorFromWorkshop(int workshopId, int advisorId) throws SchedulingException {
+        IAdvisor advisor = advisors.get(advisorId);
+        if (advisor == null) throw new SchedulingException(ScheduleFailureReason.ADVISOR_NOT_FOUND);
+
+        IEvent event = events.get(workshopId);
+        if (event == null || !(event instanceof IWorkshop)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+        IWorkshop ws = (IWorkshop) event;
+
+        if (!ws.getAdvisorIds().contains(advisorId)) throw new SchedulingException(ScheduleFailureReason.EVENT_NOT_FOUND);
+
+        ws.getAdvisorIds().remove(advisorId);
+        advisor.getSchedule().remove(workshopId);
+    }
+}
